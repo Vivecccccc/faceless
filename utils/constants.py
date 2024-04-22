@@ -14,6 +14,10 @@ S3_CONSTANTS = {
     'REGION_NAME': os.environ.get('AWS_REGION_NAME'),
 }
 
+PORTAL_CONSTANTS = {
+    'ENDPOINT_URL': os.environ.get('PORTAL_ENDPOINT_URL'),
+}
+
 ES_CONSTANTS = {
     'ENDPOINT_URL': os.environ.get('ES_ENDPOINT_URL'),
     'BASIC_AUTH': (os.environ.get('ES_USERNAME'), os.environ.get('ES_PASSWORD')),
@@ -24,6 +28,7 @@ ES_CONSTANTS = {
 ES_INDEX_MAPPING = {
     "mappings": {
         "properties": {
+            "indexed_at": {"type": "date"},
             "metadata": {
                 "properties": {
                     "application_id": {

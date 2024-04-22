@@ -1,19 +1,31 @@
+from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
+from PIL import Image as PIL
+
+class StatusEnum(Enum):
+    NEVER = 0
+    SUCCESS = 1
+    FAILURE = -1
+
 class VideoMetadata(BaseModel):
     application_id: str
     s3_file_key: str
-    create_at: datetime
+    created_at: Optional[datetime]
 
 class VideoStatus(BaseModel):
-    fetched: bool = False
-    captured: bool = False
-    peated: bool = False # this indicates the stastus of video being feature extracted
+    fetched: StatusEnum = StatusEnum.NEVER
+    captured: StatusEnum = StatusEnum.NEVER
+    peated: StatusEnum = StatusEnum.NEVER # this indicates the status of video being feature extracted
+
+    def is_all_green(self):
+        return self.fetched + self.captured + self.peated == 3
 
 class Video(BaseModel):
     id: str
+    indexed_at: datetime
     metadata: VideoMetadata
     status: VideoStatus
     embedding: Optional[List[float]] = None
