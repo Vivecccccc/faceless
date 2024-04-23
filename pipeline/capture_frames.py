@@ -83,7 +83,7 @@ def run_batch_capture(v: Video, num_frames: int):
     valid_frames = []
     try:
         frames = _capture(v, num_frames)
-        frames_h5_path = serialize_frames(frames, v, is_raw=True)
+        frames_h5_path = serialize_frames(frames, num_frames, v, is_raw=True)
         del frames
     except Exception as e:
         logging.error(f'Error while capturing frames for video {v.id}: {e}')
