@@ -63,10 +63,10 @@ def fetch_videos(since: Optional[datetime]):
         item['status_id'] = status.fetched
         item['timestamp'] = created_at
 
-    try:
-        response_post = requests.post(url=PORTAL_CONSTANTS['ENDPOINT_URL'], json=data)
-        response_post.raise_for_status()
-    except Exception as e:
-        logging.error(f'Failed to update video status due to {e}')
+    # try:
+    #     response_post = requests.post(url=PORTAL_CONSTANTS['ENDPOINT_URL'], json=data)
+    #     response_post.raise_for_status()
+    # except Exception as e:
+    #     logging.error(f'Failed to update video status due to {e}')
     
     return videos

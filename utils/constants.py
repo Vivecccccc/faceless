@@ -83,5 +83,6 @@ DETECTOR_CONSTANTS = {
 }
 
 for _, v in META_CONSTANTS.items():
-    if not os.path.exists(v):
-        os.makedirs(v)
+    if v in ['TEMP_VIDEO_STORAGE', 'TEMP_IMAGE_STORAGE']:
+        if not os.path.exists(v):
+            os.makedirs(v)

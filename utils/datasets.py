@@ -11,7 +11,7 @@ from .constants import *
 
 def _infer_shape(frames: List[Tuple[int, Image.Image]]):
     if all([frame[1].size == frames[0][1].size for frame in frames]):
-        return frames[0][1].size
+        return (frames[0][1].size[1], frames[0][1].size[0])
     else:
         raise ValueError('All frames must have the same shape')
 
@@ -23,7 +23,7 @@ def serialize_frames(frames: List[Tuple[int, Image.Image]],
     os.makedirs(os.path.dirname(stored_path), exist_ok=True)
     try:
         unified_shape = _infer_shape(frames)
-        with h5py.File(stored_path, 'w') as file:
+        with h5py.File(stored_path, 'a') as file:
             if is_raw:
                 if len(frames) != num_frames:
                     raise ValueError('Frames captured mismatch with the specified number of frames')
@@ -49,8 +49,8 @@ class FramesH5Dataset(Dataset):
         self.path = path
         self.mask = None
         with h5py.File(path, 'r') as file:
-            self.data = file['raw' if is_raw else 'face']
-            self.mask = file['mask'] if not is_raw else None
+            self.data = np.array(file['raw' if is_raw else 'face'])
+            self.mask = np.array(file['mask']) if not is_raw else None
 
     def __len__(self):
         return len(self.data)
@@ -62,7 +62,7 @@ class FramesH5Dataset(Dataset):
         return self.data[idx], flag
 
 def collate_frames(batch):
-    frames = [item[0] for item in batch]
+    frames = [torch.tensor(item[0]) for item in batch]
     flags = [item[1] for item in batch]
     return torch.stack(frames), torch.tensor(flags)
 
