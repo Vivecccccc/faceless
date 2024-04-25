@@ -1,9 +1,13 @@
 from enum import Enum
+from hashlib import md5
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
 from PIL import Image as PIL
+
+def hash_anystring(s: str):
+    return md5(s.encode()).hexdigest()
 
 class StatusEnum(Enum):
     NEVER = 0
@@ -29,3 +33,7 @@ class Video(BaseModel):
     metadata: VideoMetadata
     status: VideoStatus
     embedding: Optional[List[float]] = None
+
+    def get_job_id(self):
+        indexed_at_str = self.indexed_at.strftime('%Y%m%d%H%M%S')
+        return hash_anystring(indexed_at_str)

@@ -265,7 +265,7 @@ def detect_faces_batch(batch: Tuple[torch.Tensor, torch.Tensor],
                        nms_thresholds=[0.7, 0.7, 0.7]):
     frames, _ = batch
     batch_size = frames.size(0)
-    masks = np.zeros(batch_size)
+    masks = np.ones(batch_size)
 
     scales = _get_scales(frames, min_face_size)
     
@@ -280,7 +280,7 @@ def detect_faces_batch(batch: Tuple[torch.Tensor, torch.Tensor],
     valid_boxes = []
     for i, boxes in enumerate(fused_boxes):
         if boxes.size == 0:
-            masks[i] = 1
+            masks[i] = 0
             continue
         keep = nms(boxes[:, 0:5], nms_thresholds[0])
         boxes = boxes[keep]
@@ -298,7 +298,7 @@ def detect_faces_batch(batch: Tuple[torch.Tensor, torch.Tensor],
                                 thresholds[1],
                                 nms_thresholds[1]) # (batch_size, ndarray(num_boxes, 9))
     for i in range(batch_size):
-        if masks[i] == 0:
+        if masks[i] == 1:
             try:
                 fused_boxes[i] = valid_boxes.pop(0)
             except IndexError:
@@ -310,7 +310,7 @@ def detect_faces_batch(batch: Tuple[torch.Tensor, torch.Tensor],
     boxed_frames = []
     for i, boxes in enumerate(fused_boxes):
         if boxes.size == 0:
-            masks[i] = 1
+            masks[i] = 0
             continue
         boxed_frame = _get_image_boxes(boxes, frames[i], size=48)
         boxed_frames.append(boxed_frame)
@@ -321,7 +321,7 @@ def detect_faces_batch(batch: Tuple[torch.Tensor, torch.Tensor],
                                           thresholds[2],
                                           nms_thresholds[2])
     
-    non_masked_indices = (masks == 0).nonzero()[0]
+    non_masked_indices = masks.nonzero()[0]
     # boxes with size 0 will be ignored, no need to set mask to 1 explicitly
     non_masked_indices = np.repeat(non_masked_indices, [len(boxes) for boxes in valid_boxes], axis=0)
     

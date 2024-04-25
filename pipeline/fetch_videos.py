@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+import cv2
 import requests
 from datetime import datetime
 from typing import List, Optional, Tuple
@@ -28,13 +29,29 @@ s3_client = session.client(service_name='s3',
                            region_name=S3_REGION_NAME)
 
 def _get_video(s3_file_key: str, id: str) -> Tuple[bool, Optional[datetime]]:
+    proposed_path = os.path.join(META_CONSTANTS['TEMP_VIDEO_STORAGE'], f'{id}{META_CONSTANTS['VIDEO_EXTENSION']}')
     try:
-        created_at = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=s3_file_key)['LastModified']
-        s3_client.download_file(Bucket=S3_BUCKET_NAME, Key=s3_file_key, Filename=os.path.join(META_CONSTANTS['TEMP_VIDEO_STORAGE'], id, META_CONSTANTS['VIDEO_EXTENSION']))
-        return True, created_at if isinstance(created_at, datetime) else None
+        created_at = s3_client.head_object(Bucket=S3_BUCKET_NAME, Key=s3_file_key)['LastModified']
+        if not isinstance(created_at, datetime):
+            raise Exception('Failure retrieving video creation time')
+        s3_client.download_file(Bucket=S3_BUCKET_NAME, Key=s3_file_key, 
+                                Filename=proposed_path)
+        integrity = _check_video_integrity(proposed_path)
+        return integrity, created_at
     except Exception as e:
         logging.error(f'Error while fetching video {s3_file_key}: {e}')
         return False, None
+    
+def _check_video_integrity(file_path: str) -> bool:
+    try:
+        cap = cv2.VideoCapture(file_path)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        if total_frames == 0:
+            raise Exception('Video file has no frames')
+        return True
+    except Exception as e:
+        raise Exception(f'Video file may be corrupted: {e}')
     
 def fetch_videos(since: Optional[datetime]):
     videos: List[Video] = []
