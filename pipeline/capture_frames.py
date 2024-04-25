@@ -10,7 +10,7 @@ from apps.detector.align_trans import get_reference_facial_points, warp_and_crop
 from apps.detector.detector_batch import detect_faces_batch
 from ..utils.constants import META_CONSTANTS, DETECTOR_CONSTANTS
 from ..utils.dataclasses import StatusEnum, Video
-from ..utils.datasets import FramesH5DataLoader, FramesH5Dataset, serialize_frames
+from ..utils.datasets import FramesH5DataLoader, FramesH5Dataset, serialize_faces, serialize_frames, remove_serialized_frames
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -54,7 +54,7 @@ def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tupl
     valid_frames = {i: [] for i in range(num_frames)}
     try:
         frames = _capture(v, num_frames)
-        frames_h5_path = serialize_frames([x for x in enumerate(frames)], num_frames, v, is_raw=True)
+        frames_h5_path = serialize_frames([x for x in enumerate(frames)], num_frames, v)
         del frames
     except Exception as e:
         logging.error(f'Error while capturing frames for video {v.id}: {e}')
@@ -80,14 +80,12 @@ def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tupl
         logging.error(f'Error during detection phase for video {v.id}: {e}')
         v.status.captured = StatusEnum.FAILURE
         return None
-    
-    v.status.captured = StatusEnum.SUCCESS
+
     return valid_frames
 
 def postprocessing(valid_frames: Dict[int, List[Tuple[Image.Image, np.ndarray]]], 
-                   v: Video) -> Optional[str]:
-    stored_path = os.path.join(META_CONSTANTS['TEMP_IMAGE_STORAGE'], f'{v.get_job_id()}.h5')
-    
+                   v: Video,
+                   num_frames: int) -> Optional[str]:
     frame_items = list(valid_frames.items())
     frame_items = sorted(frame_items, key=lambda x: x[0])
 
@@ -96,8 +94,9 @@ def postprocessing(valid_frames: Dict[int, List[Tuple[Image.Image, np.ndarray]]]
 
     get_shifting = lambda coord1, coord2: np.linalg.norm([coord1[0] - coord2[0], coord1[1] - coord2[1]])
     
-    # for each pair of consecutive frames, 
-    # calculate the shifting of the face center and the average face size and score
+    # for each pair of consecutive frames,
+    # calculate the shifts and changes of size of the face center between the largest face in frame 1 and the faces in frame 2
+    # the face in frame 2 that has the least change should be the largest face in frame 2
     # use itertools to iterate over pairs of consecutive frames
     from itertools import pairwise
     trajectory = []
@@ -123,4 +122,29 @@ def postprocessing(valid_frames: Dict[int, List[Tuple[Image.Image, np.ndarray]]]
         integrity = mini_traj[0][0] == largest_box2_i # the largest face in frame 2 should have the least change compared to that in frame 1
         trajectory.append(((idx2, largest_face2), integrity))
     # get the longest sub trajectory with integrity equals to True
+    longest_sub_traj = []
+    current_sub_traj = []
+    for item in trajectory:
+        if item[1]:
+            current_sub_traj.append(item[0])
+        else:
+            if len(current_sub_traj) > len(longest_sub_traj):
+                longest_sub_traj = current_sub_traj
+            current_sub_traj = []
+    if len(current_sub_traj) > len(longest_sub_traj):
+        longest_sub_traj = current_sub_traj
     
+    if len(longest_sub_traj) < round(num_frames / 3):
+        v.status.captured = StatusEnum.FAILURE
+        logging.error(f'Failed to capture enough valid frames for video {v.id}')
+        return None
+    
+    try:
+        stored_path = serialize_faces(longest_sub_traj, num_frames, v)
+        remove_serialized_frames(v)
+    except Exception as e:
+        logging.error(f'Error while serializing faces for video {v.id}: {e}')
+        v.status.captured = StatusEnum.FAILURE
+        return None
+    v.status.captured = StatusEnum.SUCCESS
+    return stored_path

@@ -17,32 +17,53 @@ def _infer_shape(frames: List[Tuple[int, Image.Image]]):
 
 def serialize_frames(frames: List[Tuple[int, Image.Image]], 
                      num_frames: int,
-                     v: Video, 
-                     is_raw: bool) -> Optional[str]:
+                     v: Video) -> str:
     stored_path = os.path.join(META_CONSTANTS['TEMP_IMAGE_STORAGE'], f'{v.id}.h5')
     os.makedirs(os.path.dirname(stored_path), exist_ok=True)
     try:
         unified_shape = _infer_shape(frames)
         with h5py.File(stored_path, 'a') as file:
-            if is_raw:
-                if len(frames) != num_frames:
-                    raise ValueError('Frames captured mismatch with the specified number of frames')
-                file.create_dataset('raw', shape=(num_frames, *unified_shape, 3), dtype='uint8')
-            else:
-                file.create_dataset('face', shape=(num_frames, *unified_shape, 3), dtype='uint8')
-                file.create_dataset('mask', shape=(num_frames,), dtype='bool')  # Change dtype to 'bool'
-            dataset = file['raw' if is_raw else 'face']
-            mask_dataset = file['mask'] if not is_raw else None  # Create a reference to the 'mask' dataset
+            if len(frames) != num_frames:
+                raise ValueError('Frames captured mismatch with the specified number of frames')
+            file.create_dataset('raw', shape=(num_frames, *unified_shape, 3), dtype='uint8')
+            dataset = file['raw']
             for i, frame in frames:
                 if frame.mode != 'RGB':
                     frame = frame.convert('RGB')
                 frame_array = np.array(frame, dtype='uint8')
                 dataset[i] = frame_array
-                if not is_raw:
-                    mask_dataset[i] = True  # Set the mask value to True for the current frame
     except Exception as e:
         raise e
     return stored_path
+
+def serialize_faces(frames: List[Tuple[int, Image.Image]],
+                    num_frames: int,
+                    v: Video) -> str:
+    stored_path = os.path.join(META_CONSTANTS['TEMP_IMAGE_STORAGE'], f'{v.get_job_id()}.h5')
+    os.makedirs(os.path.dirname(stored_path), exist_ok=True)
+    try:
+        unified_shape = _infer_shape(frames)
+        with h5py.File(stored_path, 'a') as file:
+            file.create_dataset(f'{v.id}-face', shape=(num_frames, *unified_shape, 3), dtype='uint8')
+            file.create_dataset(f'{v.id}-mask', shape=(num_frames,), dtype='bool')
+            dataset = file[f'{v.id}-face']
+            mask_dataset = file[f'{v.id}-mask']
+            for i, frame in frames:
+                if frame.mode != 'RGB':
+                    frame = frame.convert('RGB')
+                frame_array = np.array(frame, dtype='uint8')
+                dataset[i] = frame_array
+                mask_dataset[i] = True
+    except Exception as e:
+        raise e
+    return stored_path
+
+def remove_serialized_frames(v: Video):
+    stored_path = os.path.join(META_CONSTANTS['TEMP_IMAGE_STORAGE'], f'{v.id}.h5')
+    try:
+        os.remove(stored_path)
+    except Exception as e:
+        raise e
 
 class FramesH5Dataset(Dataset):
     def __init__(self, path: str, is_raw: bool):

@@ -9,9 +9,9 @@ from .get_nets import PNet, RNet, ONet
 from .box_utils import correct_bboxes, nms, calibrate_box, convert_to_square, _preprocess
 
 # initialize MT-CNN networks
-pnet = PNet()
-rnet = RNet()
-onet = ONet()
+pnet = PNet().eval()
+rnet = RNet().eval()
+onet = ONet().eval()
 
 def _get_scales(frames: torch.Tensor,
                 min_face_size=20.0):
@@ -262,7 +262,7 @@ def _third_stage_batch(frames: List[np.ndarray],
 def detect_faces_batch(batch: Tuple[torch.Tensor, torch.Tensor],
                        min_face_size=20.0,
                        thresholds=[0.6, 0.7, 0.8],
-                       nms_thresholds=[0.7, 0.7, 0.7]):
+                       nms_thresholds=[0.7, 0.7, 0.2]):
     frames, _ = batch
     batch_size = frames.size(0)
     masks = np.ones(batch_size)
