@@ -44,7 +44,7 @@ def serialize_faces(frames: List[Tuple[int, Image.Image]],
     try:
         unified_shape = _infer_shape(frames)
         with h5py.File(stored_path, 'a') as file:
-            file.create_dataset(f'{v.id}-face', shape=(num_frames, *unified_shape, 3), dtype='uint8')
+            file.create_dataset(f'{v.id}-face', shape=(num_frames, 3, *unified_shape), dtype='uint8')
             file.create_dataset(f'{v.id}-mask', shape=(num_frames,), dtype='bool')
             dataset = file[f'{v.id}-face']
             mask_dataset = file[f'{v.id}-mask']
@@ -52,7 +52,7 @@ def serialize_faces(frames: List[Tuple[int, Image.Image]],
                 if frame.mode != 'RGB':
                     frame = frame.convert('RGB')
                 frame_array = np.array(frame, dtype='uint8')
-                dataset[i] = frame_array
+                dataset[i] = frame_array.transpose((2, 0, 1))
                 mask_dataset[i] = True
     except Exception as e:
         raise e
@@ -94,3 +94,35 @@ class FramesH5DataLoader(DataLoader):
                          batch_size=batch_size, 
                          shuffle=False,
                          collate_fn=collate_frames)
+        
+class FaceH5Dataset(Dataset):
+    def __init__(self, path: str, num_frames: int):
+        self.path = path
+        self.indices = []
+        with h5py.File(self.path, 'r') as file:
+            self.video_ids = [key.split('-face')[0] for key in file.keys() if key.endswith('-face')]
+            for video_id in self.video_ids:
+                key_face = f'{video_id}-face'
+                if num_frames != file[key_face].shape[0]:
+                    raise ValueError(f'Number of frames in dataset of {video_id} mismatches with the specified number of frames')
+                self.indices.extend([(video_id, i) for i in range(num_frames)])
+    
+    def __len__(self):
+        return len(self.indices)
+    
+    def __getitem__(self, idx):
+        video_id, frame_idx = self.indices[idx]
+        with h5py.File(self.path, 'r') as file:
+            face = file[f'{video_id}-face'][frame_idx]
+            mask = file[f'{video_id}-mask'][frame_idx]
+            return {
+                'img': torch.from_numpy(face).float(),
+                'mask': torch.tensor(mask, dtype=torch.bool),
+                'video_id': video_id
+            }
+        
+    def collate_fn(batch):
+        images = torch.stack([item['img'] for item in batch])
+        masks = torch.stack([item['mask'] for item in batch])
+        video_ids = [item['video_id'] for item in batch]
+        return images, masks, video_ids
