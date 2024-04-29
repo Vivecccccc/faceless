@@ -6,8 +6,8 @@ import numpy as np
 from PIL import Image
 from typing import Dict, List, Optional, Tuple
 
-from apps.detector.align_trans import get_reference_facial_points, warp_and_crop_face
-from apps.detector.detector_batch import detect_faces_batch
+from ..apps.detector.align_trans import get_reference_facial_points, warp_and_crop_face
+from ..apps.detector.detector_batch import detect_faces_batch
 from ..utils.constants import META_CONSTANTS, DETECTOR_CONSTANTS
 from ..utils.dataclasses import StatusEnum, Video
 from ..utils.datasets import FramesH5DataLoader, FramesH5Dataset, serialize_faces, serialize_frames, remove_serialized_frames
@@ -61,10 +61,9 @@ def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tupl
         v.status.captured = StatusEnum.FAILURE
         return None
     
-    fr_ds = FramesH5Dataset(frames_h5_path, is_raw=True)
+    fr_ds = FramesH5Dataset(frames_h5_path)
     dataloader = FramesH5DataLoader(fr_ds)
     batch = next(iter(dataloader)) # batch size equals to len(dataset) equalled to num_frames
-    frames_tensor, _ = batch
     try:
         boxes, landmarks, indices = detect_faces_batch(batch)
 
@@ -72,7 +71,7 @@ def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tupl
             raise Exception(f'failed detecting any valid faces in video')
         
         for idx, landmark, box in zip(indices, landmarks, boxes):
-            frame_arr = frames_tensor[idx].numpy()
+            frame_arr = batch[idx].numpy()
             facial_keypoints = [[landmark[j], landmark[j + 5]] for j in range(5)]
             warped_face = Image.fromarray(warp_and_crop_face(frame_arr, facial_keypoints, REF_POINTS, (CROP_SIZE, CROP_SIZE)))
             valid_frames[idx].append((warped_face, box))

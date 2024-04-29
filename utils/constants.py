@@ -47,7 +47,7 @@ ES_INDEX_MAPPING = {
                             }
                         }
                     },
-                    "create_at": {"type": "date"},
+                    "created_at": {"type": "date"},
                 }
             },
             "status": {
@@ -59,7 +59,9 @@ ES_INDEX_MAPPING = {
             },
             "embedding": {
                 "type": "dense_vector",
-                "dims": 768
+                "dims": 512,
+                "similarity": "dot_product",
+                "index": "true"
             },
             "feedback": {
                 "properties": {

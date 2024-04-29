@@ -37,3 +37,19 @@ class Video(BaseModel):
     def get_job_id(self):
         indexed_at_str = self.indexed_at.strftime('%Y%m%d%H%M%S')
         return hash_anystring(indexed_at_str)
+    
+    def to_es_obj(self):
+        return {
+            'indexed_at': self.indexed_at,
+            'metadata': {
+                'application_id': self.metadata.application_id,
+                's3_file_key': self.metadata.s3_file_key,
+                'created_at': self.metadata.created_at
+            },
+            'status': {
+                'fetched': self.status.fetched,
+                'captured': self.status.captured,
+                'peated': self.status.peated
+            },
+            'embedding': self.embedding
+        }

@@ -66,38 +66,32 @@ def remove_serialized_frames(v: Video):
         raise e
 
 class FramesH5Dataset(Dataset):
-    def __init__(self, path: str, is_raw: bool):
+    def __init__(self, path: str):
         self.path = path
-        self.mask = None
         with h5py.File(path, 'r') as file:
-            self.data = np.array(file['raw' if is_raw else 'face'])
-            self.mask = np.array(file['mask']) if not is_raw else None
+            self.data = np.array(file['raw'])
 
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, idx):
-        flag = False
-        if self.mask is not None:
-            flag = self.mask[idx]
-        return self.data[idx], flag
+        return self.data[idx]
 
-def collate_frames(batch):
-    frames = [torch.tensor(item[0]) for item in batch]
-    flags = [item[1] for item in batch]
-    return torch.stack(frames), torch.tensor(flags)
+    def collate_fn(self, batch):
+        return torch.stack(batch)
 
 class FramesH5DataLoader(DataLoader):
-    def __init__(self, dataset: Dataset):
+    def __init__(self, dataset: FramesH5Dataset):
         batch_size = len(dataset)
         super().__init__(dataset, 
                          batch_size=batch_size, 
                          shuffle=False,
-                         collate_fn=collate_frames)
+                         collate_fn=dataset.collate_fn)
         
 class FaceH5Dataset(Dataset):
-    def __init__(self, path: str, num_frames: int):
+    def __init__(self, path: str, num_frames: int, transform=None):
         self.path = path
+        self.transform = transform
         self.indices = []
         with h5py.File(self.path, 'r') as file:
             self.video_ids = [key.split('-face')[0] for key in file.keys() if key.endswith('-face')]
@@ -115,11 +109,14 @@ class FaceH5Dataset(Dataset):
         with h5py.File(self.path, 'r') as file:
             face = file[f'{video_id}-face'][frame_idx]
             mask = file[f'{video_id}-mask'][frame_idx]
-            return {
+            D = {
                 'img': torch.from_numpy(face).float(),
                 'mask': torch.tensor(mask, dtype=torch.bool),
                 'video_id': video_id
             }
+        if self.transform:
+            D['img'] = self.transform(D['img'])
+        return D
         
     def collate_fn(batch):
         images = torch.stack([item['img'] for item in batch])

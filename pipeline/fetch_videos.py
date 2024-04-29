@@ -3,7 +3,7 @@ import uuid
 import logging
 import cv2
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 from boto3.session import Session
 
@@ -55,8 +55,12 @@ def _check_video_integrity(file_path: str) -> bool:
     
 def fetch_videos(since: Optional[datetime]):
     videos: List[Video] = []
-    if since is None:
-        since: datetime = get_last_index_time()
+    try:
+        if since is None:
+            since: datetime = get_last_index_time()
+    except Exception as e:
+        logging.warning('Failed to retrieve last indexed time, defaulting to one day ago')
+        since: datetime = datetime.now() - timedelta(days=1)
     now: datetime = datetime.now()
     try:
         response_get = requests.get(url=PORTAL_CONSTANTS['ENDPOINT_URL'], params={'since': since, 'until': datetime.now()})

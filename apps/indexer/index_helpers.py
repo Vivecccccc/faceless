@@ -1,21 +1,48 @@
 import logging
 import elasticsearch as es
+from typing import Optional
 from datetime import datetime
 
 from ...utils.constants import ES_INDEX_MAPPING
 from . import es_client, INDEX_NAME
 
-def create_index(index_name: str = INDEX_NAME, client: es.Elasticsearch = es_client):
+def create_index(index_name: str = INDEX_NAME, client: es.Elasticsearch = es_client, exists_ok: bool = True) -> Optional[str]:
     """
     Create an index in Elasticsearch if it does not exist.
     """
     if not client.indices.exists(index=index_name):
-        client.indices.create(index=index_name, body=ES_INDEX_MAPPING)
+        try:
+            client.indices.create(index=index_name, body=ES_INDEX_MAPPING)
+            return index_name
+        except Exception as e:
+            raise Exception(f"An error occurred while creating index {index_name}: {str(e)}")
     else:
         if client.count(index=index_name)['count'] == 0:
-            client.indices.put_mapping(index=index_name, body=ES_INDEX_MAPPING['mappings'])
+            try:
+                client.indices.put_mapping(index=index_name, body=ES_INDEX_MAPPING['mappings'])
+                return index_name
+            except Exception as e:
+                raise Exception(f"An error occurred while updating mapping for index {index_name}: {str(e)}")
         else:
-            raise Exception(f'Index {index_name} already exists and is not empty.')
+            is_same_mapping = check_mapping_consistency(index_name=index_name, client=client, mapping=ES_INDEX_MAPPING)
+            if is_same_mapping:
+                return index_name
+            if not exists_ok and not is_same_mapping:
+                raise Exception(f'Index {index_name} already exists and is not empty. Set exists_ok=True to bypass this error')
+    return None
+
+def check_mapping_consistency(index_name: str = INDEX_NAME,
+                              client: es.Elasticsearch = es_client,
+                              mapping: dict = ES_INDEX_MAPPING) -> bool:
+    """
+    Check if the mapping of an index in Elasticsearch is consistent with the expected mapping.
+    """
+    try:
+        current_mapping = client.indices.get_mapping(index=index_name)[index_name]['mappings']
+        return current_mapping == mapping
+    except Exception as e:
+        logging.error(f"An error occurred while checking mapping consistency for index {index_name}: {str(e)}")
+        return False
 
 def get_last_index_time(index_name: str = INDEX_NAME, client: es.Elasticsearch = es_client) -> datetime:
     """
