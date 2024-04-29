@@ -4,8 +4,6 @@ from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
-from PIL import Image as PIL
-
 def hash_anystring(s: str):
     return md5(s.encode()).hexdigest()
 
@@ -47,9 +45,9 @@ class Video(BaseModel):
                 'created_at': self.metadata.created_at
             },
             'status': {
-                'fetched': self.status.fetched,
-                'captured': self.status.captured,
-                'peated': self.status.peated
+                'fetched': self.status.fetched.value,
+                'captured': self.status.captured.value,
+                'peated': self.status.peated.value
             },
             'embedding': self.embedding
         }

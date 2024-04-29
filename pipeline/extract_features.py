@@ -43,7 +43,7 @@ def _init_model(num_frames: int,
 def _init_data(path: str, 
                num_frames: int, 
                batch_size: int,
-               input_size: Tuple[int, int] = (112, 112)) -> DataLoader:
+               input_size: Tuple[int, int]) -> DataLoader:
     transform = transforms.Compose([
         transforms.Resize([int(128 * input_size[0] / input_size[1]), 
                            int(128 * input_size[0] / input_size[1])]),
@@ -64,7 +64,7 @@ def extract_features(vs: List[Video],
                      backbone_ckpt_path: Optional[str] = None):
     vid_dict = {v.id: v for v in vs}
     try:
-        dataloader = _init_data(h5_path, num_frames, batch_size)
+        dataloader = _init_data(h5_path, num_frames, batch_size, input_size)
         model = _init_model(num_frames, ckpt_path=ckpt_path, backbone_ckpt_path=backbone_ckpt_path)
     except Exception as e:
         logging.error(f'Error while initializing model and data: {e}')

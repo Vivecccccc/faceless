@@ -52,9 +52,9 @@ ES_INDEX_MAPPING = {
             },
             "status": {
                 "properties": {
-                    "fetched": {"type": "boolean"},
-                    "captured": {"type": "boolean"},
-                    "peated": {"type": "boolean"},
+                    "fetched": {"type": "integer"},
+                    "captured": {"type": "integer"},
+                    "peated": {"type": "integer"},
                 }
             },
             "embedding": {

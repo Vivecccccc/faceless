@@ -24,12 +24,11 @@ def create_index(index_name: str = INDEX_NAME, client: es.Elasticsearch = es_cli
             except Exception as e:
                 raise Exception(f"An error occurred while updating mapping for index {index_name}: {str(e)}")
         else:
-            is_same_mapping = check_mapping_consistency(index_name=index_name, client=client, mapping=ES_INDEX_MAPPING)
-            if is_same_mapping:
-                return index_name
-            if not exists_ok and not is_same_mapping:
+            if not exists_ok:
                 raise Exception(f'Index {index_name} already exists and is not empty. Set exists_ok=True to bypass this error')
-    return None
+            else:
+                is_same_mapping = check_mapping_consistency(index_name=index_name, client=client, mapping=ES_INDEX_MAPPING)
+                return index_name if is_same_mapping else None
 
 def check_mapping_consistency(index_name: str = INDEX_NAME,
                               client: es.Elasticsearch = es_client,
