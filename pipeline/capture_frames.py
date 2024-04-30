@@ -114,7 +114,7 @@ def postprocessing(valid_frames: Dict[int, List[Tuple[Image.Image, np.ndarray]]]
         mini_traj = []
         for i2, box2 in enumerate(candidate_boxes2):
             shift = get_shifting(get_face_center(largest_box1), get_face_center(box2))
-            size_change = math.sqrt(math.abs(get_face_size(largest_box1) - get_face_size(box2)))
+            size_change = math.sqrt(abs(get_face_size(largest_box1) - get_face_size(box2)))
             change_score = shift + size_change
             mini_traj.append((i2, change_score))
         mini_traj = sorted(mini_traj, key=lambda x: x[1])

@@ -6,7 +6,7 @@ from datetime import datetime
 from ...utils.constants import ES_INDEX_MAPPING
 from . import es_client, INDEX_NAME
 
-def create_index(index_name: str = INDEX_NAME, client: es.Elasticsearch = es_client, exists_ok: bool = True) -> Optional[str]:
+def create_or_check_index(index_name: str = INDEX_NAME, client: es.Elasticsearch = es_client, exists_ok: bool = True) -> Optional[str]:
     """
     Create an index in Elasticsearch if it does not exist.
     """
@@ -32,7 +32,8 @@ def create_index(index_name: str = INDEX_NAME, client: es.Elasticsearch = es_cli
 
 def check_mapping_consistency(index_name: str = INDEX_NAME,
                               client: es.Elasticsearch = es_client,
-                              mapping: dict = ES_INDEX_MAPPING) -> bool:
+                              mapping: dict = ES_INDEX_MAPPING,
+                              raise_for_status: bool = False) -> bool:
     """
     Check if the mapping of an index in Elasticsearch is consistent with the expected mapping.
     """
@@ -40,8 +41,10 @@ def check_mapping_consistency(index_name: str = INDEX_NAME,
         current_mapping = client.indices.get_mapping(index=index_name)[index_name]['mappings']
         return current_mapping == mapping
     except Exception as e:
+        if raise_for_status:
+            raise e
         logging.error(f"An error occurred while checking mapping consistency for index {index_name}: {str(e)}")
-        return False
+    return False
 
 def get_last_index_time(index_name: str = INDEX_NAME, client: es.Elasticsearch = es_client) -> datetime:
     """

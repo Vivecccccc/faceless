@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 from boto3.session import Session
 
 from ..apps.indexer import es_client
-from ..apps.indexer.index_helpers import get_last_index_time, create_index
+from ..apps.indexer.index_helpers import get_last_index_time, create_or_check_index
 
 from ..utils.constants import S3_CONSTANTS, META_CONSTANTS, PORTAL_CONSTANTS
 from ..utils.dataclasses import StatusEnum, Video, VideoMetadata, VideoStatus
@@ -59,7 +59,7 @@ def _check_video_integrity(file_path: str) -> bool:
 def fetch_prev_failure() -> List[Video]:
     videos: List[Video] = []
     try:
-        index_name = create_index(exists_ok=True)
+        index_name = create_or_check_index(exists_ok=True)
         if index_name is None:
             raise Exception(f'Index with name {index_name} has a different mapping')
         query = {
@@ -107,7 +107,7 @@ def fetch_prev_failure() -> List[Video]:
             videos.append(video)
     return videos
 
-def fetch_videos(since: Optional[datetime]):
+def fetch_videos(since: Optional[datetime]) -> List[Video]:
     videos: List[Video] = []
     try:
         if since is None:

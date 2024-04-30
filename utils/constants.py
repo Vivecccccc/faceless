@@ -82,6 +82,13 @@ ES_INDEX_MAPPING = {
 DETECTOR_CONSTANTS = {
     'CROP_SIZE': 112,
     'SCALE': 1.0,
+    'NUM_FRAMES': 60,
+}
+
+RECOGNIZER_CONSTANTS = {
+    'BATCH_SIZE': 128,
+    'CKPT_PATH': None,
+    'BACKBONE_CKPT_PATH': '../static/backbone.pth',
 }
 
 for _, v in META_CONSTANTS.items():
