@@ -3,7 +3,7 @@ import elasticsearch as es
 from typing import Optional
 from datetime import datetime
 
-from ...utils.constants import ES_INDEX_MAPPING
+from utils.constants import ES_INDEX_MAPPING
 from . import es_client, INDEX_NAME
 
 def create_or_check_index(index_name: str = INDEX_NAME, client: es.Elasticsearch = es_client, exists_ok: bool = True) -> Optional[str]:
@@ -38,7 +38,7 @@ def check_mapping_consistency(index_name: str = INDEX_NAME,
     Check if the mapping of an index in Elasticsearch is consistent with the expected mapping.
     """
     try:
-        current_mapping = client.indices.get_mapping(index=index_name)[index_name]['mappings']
+        current_mapping = client.indices.get_mapping(index=index_name)[index_name]
         return current_mapping == mapping
     except Exception as e:
         if raise_for_status:
@@ -58,7 +58,7 @@ def get_last_index_time(index_name: str = INDEX_NAME, client: es.Elasticsearch =
         res = client.search(index=index_name, body=query)
         if res['hits']['total']['value'] > 0 and isinstance(res['hits']['hits'][0]['_source']['indexed_at'], datetime):
             return res['hits']['hits'][0]['_source']['indexed_at']
-        raise Exception
+        raise Exception(f'No records found in index {INDEX_NAME}')
     except Exception as e:
         logging.error(f"An error occurred while getting the last indexed_at timestamp: {str(e)}")
         return datetime.min

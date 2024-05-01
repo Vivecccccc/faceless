@@ -259,11 +259,11 @@ def _third_stage_batch(frames: List[np.ndarray],
         landmarks[i] = landmarks[i][keep]
     return boxes, landmarks
 
-def detect_faces_batch(batch: Tuple[torch.Tensor, torch.Tensor],
+def detect_faces_batch(batch: torch.Tensor,
                        min_face_size=20.0,
                        thresholds=[0.6, 0.7, 0.8],
                        nms_thresholds=[0.7, 0.7, 0.2]):
-    frames, _ = batch
+    frames = batch
     batch_size = frames.size(0)
     masks = np.ones(batch_size)
 

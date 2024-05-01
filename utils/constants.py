@@ -2,8 +2,8 @@ import os
 
 META_CONSTANTS = {
     'VIDEO_EXTENSION': '.mp4',
-    'TEMP_VIDEO_STORAGE': '../.cache/videos/',
-    'TEMP_IMAGE_STORAGE': '../.cache/images/',
+    'TEMP_VIDEO_STORAGE': '.cache/videos/',
+    'TEMP_IMAGE_STORAGE': '.cache/images/',
 }
 
 S3_CONSTANTS = {
@@ -61,7 +61,7 @@ ES_INDEX_MAPPING = {
                 "type": "dense_vector",
                 "dims": 512,
                 "similarity": "dot_product",
-                "index": "true"
+                "index": True
             },
             "feedback": {
                 "properties": {
@@ -88,10 +88,10 @@ DETECTOR_CONSTANTS = {
 RECOGNIZER_CONSTANTS = {
     'BATCH_SIZE': 128,
     'CKPT_PATH': None,
-    'BACKBONE_CKPT_PATH': '../static/backbone.pth',
+    'BACKBONE_CKPT_PATH': 'static/backbone.pth',
 }
 
-for _, v in META_CONSTANTS.items():
-    if v in ['TEMP_VIDEO_STORAGE', 'TEMP_IMAGE_STORAGE']:
+for k, v in META_CONSTANTS.items():
+    if k in ['TEMP_VIDEO_STORAGE', 'TEMP_IMAGE_STORAGE']:
         if not os.path.exists(v):
             os.makedirs(v)

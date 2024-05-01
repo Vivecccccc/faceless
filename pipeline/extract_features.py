@@ -5,10 +5,10 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
-from ..utils.dataclasses import StatusEnum, Video
-from ..utils.datasets import FaceH5Dataset
-from ..apps.recognizer.aggregator import Aggregator
-from ..apps.recognizer.utils import l2_norm
+from utils.dataclasses import StatusEnum, Video
+from utils.datasets import FaceH5Dataset
+from apps.recognizer.aggregator import Aggregator
+from apps.recognizer.utils import l2_norm
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -33,9 +33,9 @@ def _init_model(num_frames: int,
     model = Aggregator(num_frames, input_size=input_size)
     try:
         if backbone_ckpt_path:
-            model.backbone.load_state_dict(torch.load(backbone_ckpt_path))
+            model.backbone.load_state_dict(torch.load(backbone_ckpt_path, map_location=torch.device('cpu')))
         if ckpt_path:
-            model.load_state_dict(torch.load(ckpt_path))
+            model.load_state_dict(torch.load(ckpt_path, map_location=torch.device('cpu')))
     except Exception as e:
         raise e
     return model
@@ -72,6 +72,7 @@ def extract_features(vs: List[Video],
     features = _extract(model, dataloader)
     peated_vids = set([])
     for vid_id, embedding in features:
+        embedding = embedding.reshape((1, -1))
         vid_dict[vid_id].embedding = l2_norm(embedding).tolist()
         vid_dict[vid_id].status.peated = StatusEnum.SUCCESS
         peated_vids.add(vid_id)

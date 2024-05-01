@@ -7,11 +7,11 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 from boto3.session import Session
 
-from ..apps.indexer import es_client
-from ..apps.indexer.index_helpers import get_last_index_time, create_or_check_index
+from apps.indexer import es_client
+from apps.indexer.index_helpers import get_last_index_time, create_or_check_index
 
-from ..utils.constants import S3_CONSTANTS, META_CONSTANTS, PORTAL_CONSTANTS
-from ..utils.dataclasses import StatusEnum, Video, VideoMetadata, VideoStatus
+from utils.constants import S3_CONSTANTS, META_CONSTANTS, PORTAL_CONSTANTS
+from utils.dataclasses import StatusEnum, Video, VideoMetadata, VideoStatus
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -40,7 +40,7 @@ def _get_video(s3_file_key: str, id: str) -> Tuple[bool, datetime]:
         integrity = _check_video_integrity(proposed_path)
         return integrity, created_at # returning value is always [true, datetime]
     except Exception as e:
-        raise Exception(f'Error while fetching video {s3_file_key}: {e}')
+        raise Exception from e
     
 def _check_video_integrity(file_path: str) -> bool:
     cap = None

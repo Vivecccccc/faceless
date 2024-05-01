@@ -1,6 +1,6 @@
 import elasticsearch as es
 
-from ...utils.constants import ES_CONSTANTS
+from utils.constants import ES_CONSTANTS
 
 ENDPOINT_URL = ES_CONSTANTS['ENDPOINT_URL']
 BASIC_AUTH = ES_CONSTANTS['BASIC_AUTH']

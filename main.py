@@ -10,7 +10,7 @@ from pipeline.extract_features import extract_features
 from pipeline.index_es import index_videos
 
 def run_pipelines():
-    latest_videos: List[Video] = fetch_videos()
+    latest_videos: List[Video] = fetch_videos(since=None)
     prev_failures: List[Video] = fetch_prev_failure()
 
     valid_videos = latest_videos + prev_failures
@@ -38,3 +38,6 @@ def run_pipelines():
     while is_valid_mapping and maybe_retry and n < 3:
         is_valid_mapping, maybe_retry = index_videos(maybe_retry, current_indexed_at=latest_indexed_at)
         n += 1
+
+if __name__ == '__main__':
+    run_pipelines()

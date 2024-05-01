@@ -3,9 +3,9 @@ import elasticsearch as es
 from datetime import datetime
 from typing import List, Optional
 
-from ..utils.dataclasses import Video
-from ..apps.indexer import es_client, INDEX_NAME
-from ..apps.indexer.index_helpers import check_mapping_consistency
+from utils.dataclasses import Video
+from apps.indexer import es_client, INDEX_NAME
+from apps.indexer.index_helpers import check_mapping_consistency
 
 def index_videos(videos: List[Video], current_indexed_at: Optional[datetime] = None):
     is_valid_mapping = False
@@ -19,13 +19,13 @@ def index_videos(videos: List[Video], current_indexed_at: Optional[datetime] = N
     if is_valid_mapping:
         for vid in videos:
             try:
-                es_client.index(index=INDEX_NAME, document=vid.to_es_body(), id=vid.id(), op_type='create')
+                es_client.index(index=INDEX_NAME, document=vid.to_es_obj(), id=vid.id(), op_type='create')
             except es.ConflictError:
                 if vid.status.is_all_green() and vid.embedding is not None:
                     if current_indexed_at is not None:
                         vid.indexed_at = current_indexed_at # update indexed_at to the latest job
                     try:
-                        es_client.update(index=INDEX_NAME, document=vid.to_es_body(), id=vid.id())
+                        es_client.update(index=INDEX_NAME, document=vid.to_es_obj(), id=vid.id())
                     except Exception as e:
                         logging.error(f'Error while updating index for previous failure {vid.id}: {e}')
                         maybe_retry.append(vid)

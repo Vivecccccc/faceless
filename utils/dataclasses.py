@@ -23,7 +23,7 @@ class VideoStatus(BaseModel):
     peated: StatusEnum = StatusEnum.NEVER # this indicates the status of video being feature extracted
 
     def is_all_green(self):
-        return self.fetched + self.captured + self.peated == 3
+        return self.fetched.value + self.captured.value + self.peated.value == 3
 
 class Video(BaseModel):
     id: str

@@ -75,7 +75,7 @@ class FramesH5Dataset(Dataset):
         return len(self.data)
     
     def __getitem__(self, idx):
-        return self.data[idx]
+        return torch.from_numpy(self.data[idx])
 
     def collate_fn(self, batch):
         return torch.stack(batch)
@@ -91,34 +91,40 @@ class FramesH5DataLoader(DataLoader):
 class FaceH5Dataset(Dataset):
     def __init__(self, path: str, num_frames: int, transform=None):
         self.path = path
-        self.transform = transform
         self.indices = []
+        self.num_frames = num_frames
+        self.transform = transform
         with h5py.File(self.path, 'r') as file:
             self.video_ids = [key.split('-face')[0] for key in file.keys() if key.endswith('-face')]
             for video_id in self.video_ids:
                 key_face = f'{video_id}-face'
                 if num_frames != file[key_face].shape[0]:
                     raise ValueError(f'Number of frames in dataset of {video_id} mismatches with the specified number of frames')
-                self.indices.extend([(video_id, i) for i in range(num_frames)])
+                self.indices.append(video_id)
     
     def __len__(self):
         return len(self.indices)
     
     def __getitem__(self, idx):
-        video_id, frame_idx = self.indices[idx]
+        video_id = self.indices[idx]
         with h5py.File(self.path, 'r') as file:
-            face = file[f'{video_id}-face'][frame_idx]
-            mask = file[f'{video_id}-mask'][frame_idx]
+            faces_arr = np.array(file[f'{video_id}-face'])
+            mask = np.array(file[f'{video_id}-mask'])
             D = {
-                'img': torch.from_numpy(face).float(),
-                'mask': torch.tensor(mask, dtype=torch.bool),
+                'mask': torch.from_numpy(mask),
                 'video_id': video_id
             }
         if self.transform:
-            D['img'] = self.transform(D['img'])
+            faces = []
+            for i in range(self.num_frames):
+                face = Image.fromarray(faces_arr[i].transpose(1, 2, 0))
+                faces.append(self.transform(face))
+            D['img'] = torch.stack(faces)
+        else:
+            D['img'] = torch.from_numpy(faces_arr)
         return D
         
-    def collate_fn(batch):
+    def collate_fn(self, batch):
         images = torch.stack([item['img'] for item in batch])
         masks = torch.stack([item['mask'] for item in batch])
         video_ids = [item['video_id'] for item in batch]

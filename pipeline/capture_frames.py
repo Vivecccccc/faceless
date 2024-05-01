@@ -4,13 +4,14 @@ import math
 import logging
 import numpy as np
 from PIL import Image
+from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
-from ..apps.detector.align_trans import get_reference_facial_points, warp_and_crop_face
-from ..apps.detector.detector_batch import detect_faces_batch
-from ..utils.constants import META_CONSTANTS, DETECTOR_CONSTANTS
-from ..utils.dataclasses import StatusEnum, Video
-from ..utils.datasets import FramesH5DataLoader, FramesH5Dataset, serialize_faces, serialize_frames, remove_serialized_frames
+from apps.detector.align_trans import get_reference_facial_points, warp_and_crop_face
+from apps.detector.detector_batch import detect_faces_batch
+from utils.constants import META_CONSTANTS, DETECTOR_CONSTANTS
+from utils.dataclasses import StatusEnum, Video
+from utils.datasets import FramesH5DataLoader, FramesH5Dataset, serialize_faces, serialize_frames, remove_serialized_frames
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -51,7 +52,7 @@ def _capture(v: Video, num_frames: int) -> List[Image.Image]:
     return frames
 
 def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tuple[Image.Image, np.ndarray]]]]:
-    valid_frames = {i: [] for i in range(num_frames)}
+    valid_frames = defaultdict(list)
     try:
         frames = _capture(v, num_frames)
         frames_h5_path = serialize_frames([x for x in enumerate(frames)], num_frames, v)
