@@ -23,12 +23,14 @@ ES_CONSTANTS = {
     'BASIC_AUTH': (os.environ.get('ES_USERNAME'), os.environ.get('ES_PASSWORD')),
     'INDEX_NAME': 'datasets-videos',
     'CA_CERTS': os.environ.get('ES_CA_CERTS'),
+    'MAXIMUM_FAILURE_RETRY': 3,
 }
 
 ES_INDEX_MAPPING = {
     "mappings": {
         "properties": {
             "indexed_at": {"type": "date"},
+            "attempt_times": {"type": "integer"},
             "metadata": {
                 "properties": {
                     "application_id": {

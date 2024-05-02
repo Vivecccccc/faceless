@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 from boto3.session import Session
 
-from apps.indexer import es_client
+from apps.indexer import es_client, INDEX_NAME
 from apps.indexer.index_helpers import get_last_index_time, create_or_check_index
 
 from utils.constants import S3_CONSTANTS, META_CONSTANTS, PORTAL_CONSTANTS
@@ -31,37 +31,37 @@ s3_client = session.client(service_name='s3',
 
 def _get_video(s3_file_key: str, id: str) -> Tuple[bool, datetime]:
     proposed_path = os.path.join(META_CONSTANTS['TEMP_VIDEO_STORAGE'], f'{id}{META_CONSTANTS["VIDEO_EXTENSION"]}')
+    created_at = None
     try:
         created_at = s3_client.head_object(Bucket=S3_BUCKET_NAME, Key=s3_file_key)['LastModified']
-        if not isinstance(created_at, datetime):
-            raise Exception('Failure retrieving video creation time')
         s3_client.download_file(Bucket=S3_BUCKET_NAME, Key=s3_file_key, 
                                 Filename=proposed_path)
         integrity = _check_video_integrity(proposed_path)
-        return integrity, created_at # returning value is always [true, datetime]
-    except Exception as e:
-        raise Exception from e
+        return integrity, created_at
+    except Exception:
+        return False, created_at
     
 def _check_video_integrity(file_path: str) -> bool:
     cap = None
+    flag = False
     try:
         cap = cv2.VideoCapture(file_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if total_frames == 0:
-            raise ValueError('Video file has no frames')
-        return True
-    except Exception as e:
-        raise Exception(f'Video file may be corrupted') from e
+        if total_frames != 0:
+            flag = True
+    except Exception:
+        logging.error(f'Video file {file_path} may be corrupted')
     finally:
         if cap:
             cap.release()
+    return flag
     
 def fetch_prev_failure() -> List[Video]:
     videos: List[Video] = []
     try:
         index_name = create_or_check_index(exists_ok=True)
         if index_name is None:
-            raise Exception(f'Index with name {index_name} has a different mapping')
+            raise Exception(f'Index with name {INDEX_NAME} has a different mapping')
         query = {
             "query": {
                 "bool": {
@@ -69,13 +69,16 @@ def fetch_prev_failure() -> List[Video]:
                         {"bool": {"must_not": {"term": {"status.fetched": 1}}}},
                         {"bool": {"must_not": {"term": {"status.captured": 1}}}},
                         {"bool": {"must_not": {"term": {"status.peated": 1}}}}
+                    ],
+                    "must_not": [
+                        {"range": {"indexed_times": {"gt": 3}}}
                     ]
                 }
             }
         }
         response = es_client.search(index=index_name, body=query)
     except Exception as e:
-        logging.error(f'Error fetching previous failures from {index_name}: {e}')
+        logging.error(f'Error fetching previous failures from {INDEX_NAME}: {e}')
         return videos
     # perform query to fetch videos with any failure status 
     # i.e., any of fetched / captured / peated not equal to 1
@@ -86,6 +89,7 @@ def fetch_prev_failure() -> List[Video]:
         try:
             video = Video(id=hit['_id'],
                           indexed_at=video_raw['indexed_at'],
+                          attempt_times=video_raw['indexed_times'],
                           metadata=VideoMetadata(application_id=video_raw['metadata']['application_id'],
                                                  s3_file_key=video_raw['metadata']['s3_file_key'],
                                                  created_at=video_raw['metadata']['created_at']),
@@ -93,18 +97,24 @@ def fetch_prev_failure() -> List[Video]:
                                              captured=StatusEnum(video_raw['status']['captured']),
                                              peated=StatusEnum(video_raw['status']['peated'])),
                           embedding=video_raw['embedding'])
-            flag, created_at = _get_video(video_raw['metadata']['s3_file_key'], hit['_id'])
-            video.status.fetched = StatusEnum.SUCCESS
         except Exception as e:
-            logging.error(f'Error while fetching previous failure {hit["_id"]}: {e}')
+            logging.error(f'Error while fetching info of previous failure {hit["_id"]}: {e}')
+            continue
+
+        flag, created_at = _get_video(video.metadata.s3_file_key, video.id)
+        if flag and created_at is not None:
+            video.status.fetched = StatusEnum.SUCCESS
+        else:
+            logging.error(f'Error while fetching video of previous failure {hit["_id"]}')
             video.status.fetched = StatusEnum.FAILURE
-        finally:
-            if flag and created_at != video_raw['metadata']['created_at']:
-                video.metadata.created_at = created_at
-                video.status = VideoStatus(fetched=video.status.fetched,
-                                           captured=StatusEnum.NEVER,
-                                           peated=StatusEnum.NEVER)
-            videos.append(video)
+        video.attempt_times += 1
+        video.metadata = VideoMetadata(application_id=video.metadata.application_id,
+                                       s3_file_key=video.metadata.s3_file_key,
+                                       created_at=created_at)
+        video.status = VideoStatus(fetched=video.status.fetched,
+                                   captured=StatusEnum.NEVER,
+                                   peated=StatusEnum.NEVER)
+        videos.append(video)
     return videos
 
 def fetch_videos(since: Optional[datetime]) -> List[Video]:
@@ -128,16 +138,15 @@ def fetch_videos(since: Optional[datetime]) -> List[Video]:
     for item in data:
         flag = False
         id: str = uuid.uuid4().hex
-        try:
-            flag, created_at = _get_video(item['file_id'], id)
-        except Exception as e:
-            logging.error(f'Error while fetching video {item["file_id"]}: {e}')
+        flag, created_at = _get_video(item['file_id'], id)
+        if not flag or created_at is None:
+            logging.error(f'Error while fetching video {item["file_id"]}')
 
         metadata: VideoMetadata = VideoMetadata(application_id=item['app_id'],
                                                 s3_file_key=item['file_id'],
-                                                created_at=created_at if flag else None)
+                                                created_at=created_at)
         status = VideoStatus(fetched=StatusEnum.SUCCESS if flag else StatusEnum.FAILURE)
-        videos.append(Video(id=id, indexed_at=now, metadata=metadata, status=status))
+        videos.append(Video(id=id, indexed_at=now, attempt_times=1, metadata=metadata, status=status))
 
         item['status_id'] = status.fetched.value
         item['timestamp'] = created_at

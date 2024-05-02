@@ -1,8 +1,9 @@
 from enum import Enum
 from hashlib import md5
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from datetime import datetime
+from dateutil import tz
 
 def hash_anystring(s: str):
     return md5(s.encode()).hexdigest()
@@ -15,7 +16,24 @@ class StatusEnum(Enum):
 class VideoMetadata(BaseModel):
     application_id: str
     s3_file_key: str
-    created_at: Optional[datetime]
+    created_at: Optional[str]
+
+    @validator('created_at', pre=True)
+    def localize_created_at(cls, v):
+        if v is None:
+            return v
+        bj_tz = tz.gettz('Asia/Shanghai')
+        if isinstance(v, datetime):
+            v = v.replace(tzinfo=bj_tz).isoformat()
+        elif isinstance(v, str):
+            try:
+                v_dt = datetime.fromisoformat(v)
+                v = v_dt.replace(tzinfo=bj_tz).isoformat()
+            except Exception as e:
+                raise ValueError(f'Error parsing created_at: {e}')
+        else:
+            raise ValueError('created_at should be either datetime or isoformat string')
+        return v
 
 class VideoStatus(BaseModel):
     fetched: StatusEnum = StatusEnum.NEVER
@@ -27,18 +45,19 @@ class VideoStatus(BaseModel):
 
 class Video(BaseModel):
     id: str
-    indexed_at: datetime
+    indexed_at: str
+    attempt_times: int
     metadata: VideoMetadata
     status: VideoStatus
     embedding: Optional[List[float]] = None
 
     def get_job_id(self):
-        indexed_at_str = self.indexed_at.strftime('%Y%m%d%H%M%S')
-        return hash_anystring(indexed_at_str)
+        return hash_anystring(self.indexed_at)
     
     def to_es_obj(self):
         return {
             'indexed_at': self.indexed_at,
+            'attempt_times': self.attempt_times,
             'metadata': {
                 'application_id': self.metadata.application_id,
                 's3_file_key': self.metadata.s3_file_key,
@@ -51,3 +70,19 @@ class Video(BaseModel):
             },
             'embedding': self.embedding
         }
+    
+    # validator to change indexed_at from datetime to timezone-awared isoformat string
+    @validator('indexed_at', pre=True)
+    def localize_indexed_at(cls, v):
+        bj_tz = tz.gettz('Asia/Shanghai')
+        if isinstance(v, datetime):
+            v = v.replace(tzinfo=bj_tz).isoformat()
+        elif isinstance(v, str):
+            try:
+                v_dt = datetime.fromisoformat(v)
+                v = v_dt.replace(tzinfo=bj_tz).isoformat()
+            except Exception as e:
+                raise ValueError(f'Error parsing indexed_at: {e}')
+        else:
+            raise ValueError('indexed_at should be either datetime or isoformat string')
+        return v

@@ -1,3 +1,4 @@
+import logging
 from typing import List
 from collections import defaultdict
 
@@ -9,12 +10,14 @@ from pipeline.capture_frames import run_batch_capture, postprocessing
 from pipeline.extract_features import extract_features
 from pipeline.index_es import index_videos
 
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+
 def run_pipelines():
     latest_videos: List[Video] = fetch_videos(since=None)
     prev_failures: List[Video] = fetch_prev_failure()
 
-    valid_videos = latest_videos + prev_failures
-    valid_videos = list(filter(lambda x: x.status.fetched == StatusEnum.SUCCESS, valid_videos))
+    videos = latest_videos + prev_failures
+    valid_videos = list(filter(lambda x: x.status.fetched == StatusEnum.SUCCESS, videos))
     
     num_frames = DETECTOR_CONSTANTS['NUM_FRAMES']
     h5_paths = defaultdict(list)
@@ -27,13 +30,11 @@ def run_pipelines():
     
     batch_size = RECOGNIZER_CONSTANTS['BATCH_SIZE']
     backbone_ckpt_path = RECOGNIZER_CONSTANTS['BACKBONE_CKPT_PATH']
-    for h5_path, videos in h5_paths.items():
-        extract_features(videos, h5_path, num_frames, batch_size, backbone_ckpt_path=backbone_ckpt_path)
-    valid_videos = list(filter(lambda x: x.status.peated == StatusEnum.SUCCESS \
-                               and x.embedding is not None, valid_videos))
+    for h5_path, part_videos in h5_paths.items():
+        extract_features(part_videos, h5_path, num_frames, batch_size, backbone_ckpt_path=backbone_ckpt_path)
     
     latest_indexed_at = latest_videos[0].indexed_at if latest_videos else None
-    is_valid_mapping, maybe_retry = index_videos(valid_videos)
+    is_valid_mapping, maybe_retry = index_videos(videos)
     n = 0
     while is_valid_mapping and maybe_retry and n < 3:
         is_valid_mapping, maybe_retry = index_videos(maybe_retry, current_indexed_at=latest_indexed_at)

@@ -141,10 +141,11 @@ def postprocessing(valid_frames: Dict[int, List[Tuple[Image.Image, np.ndarray]]]
     
     try:
         stored_path = serialize_faces(longest_sub_traj, num_frames, v)
-        remove_serialized_frames(v)
+        v.status.captured = StatusEnum.SUCCESS
     except Exception as e:
         logging.error(f'Error while serializing faces for video {v.id}: {e}')
         v.status.captured = StatusEnum.FAILURE
         return None
-    v.status.captured = StatusEnum.SUCCESS
+    finally:
+        remove_serialized_frames(v)
     return stored_path

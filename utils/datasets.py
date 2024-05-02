@@ -63,7 +63,7 @@ def remove_serialized_frames(v: Video):
     try:
         os.remove(stored_path)
     except Exception as e:
-        raise e
+        logging.error(f'Error while removing serialized frames for video {v.id}: {e}')
 
 class FramesH5Dataset(Dataset):
     def __init__(self, path: str):
