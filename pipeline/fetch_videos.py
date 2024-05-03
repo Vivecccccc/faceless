@@ -71,7 +71,7 @@ def fetch_prev_failure() -> List[Video]:
                         {"bool": {"must_not": {"term": {"status.peated": 1}}}}
                     ],
                     "must_not": [
-                        {"range": {"indexed_times": {"gt": 3}}}
+                        {"range": {"attempt_times": {"gt": 3}}}
                     ]
                 }
             }
@@ -89,7 +89,7 @@ def fetch_prev_failure() -> List[Video]:
         try:
             video = Video(id=hit['_id'],
                           indexed_at=video_raw['indexed_at'],
-                          attempt_times=video_raw['indexed_times'],
+                          attempt_times=video_raw['attempt_times'],
                           metadata=VideoMetadata(application_id=video_raw['metadata']['application_id'],
                                                  s3_file_key=video_raw['metadata']['s3_file_key'],
                                                  created_at=video_raw['metadata']['created_at']),

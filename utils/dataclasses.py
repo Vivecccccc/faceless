@@ -86,3 +86,12 @@ class Video(BaseModel):
         else:
             raise ValueError('indexed_at should be either datetime or isoformat string')
         return v
+    
+class Duplicates(BaseModel):
+    application_id: str
+    score: float
+
+class Returns(BaseModel):
+    status: bool
+    application_id: str
+    duplicates: List[Duplicates]

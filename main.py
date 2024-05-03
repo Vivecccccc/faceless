@@ -4,6 +4,7 @@ from collections import defaultdict
 
 from utils.constants import *
 from utils.dataclasses import Video, StatusEnum
+from utils.datasets import remove_serialized_frames
 
 from pipeline.fetch_videos import fetch_videos, fetch_prev_failure
 from pipeline.capture_frames import run_batch_capture, postprocessing
@@ -27,6 +28,8 @@ def run_pipelines():
             face_h5_path = postprocessing(frames, video, num_frames)
             if face_h5_path is not None and video.status.captured == StatusEnum.SUCCESS:
                 h5_paths[face_h5_path].append(video)
+        else:
+            remove_serialized_frames(video)
     
     batch_size = RECOGNIZER_CONSTANTS['BATCH_SIZE']
     backbone_ckpt_path = RECOGNIZER_CONSTANTS['BACKBONE_CKPT_PATH']
