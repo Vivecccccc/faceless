@@ -34,7 +34,7 @@ def index_videos(videos: List[Video]):
                 continue
     return is_valid_mapping, maybe_retry
 
-def get_top_k(k: int, num_candidates: int, threshold: float, videos: List[Video]):
+def get_top_k(k: int, num_candidates: int, threshold: float, videos: List[Video]) -> List[Returns]:
     # for dot_product, actual_similarity = _score * 2 - 1
     results = []
     for video in videos:

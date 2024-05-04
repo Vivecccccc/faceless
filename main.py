@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import List
 from collections import defaultdict
@@ -9,7 +10,7 @@ from utils.datasets import remove_serialized_frames
 from pipeline.fetch_videos import fetch_videos, fetch_prev_failure
 from pipeline.capture_frames import run_batch_capture, postprocessing
 from pipeline.extract_features import extract_features
-from pipeline.index_es import index_videos
+from pipeline.index_es import index_videos, get_top_k
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -42,6 +43,10 @@ def run_pipelines():
     while is_valid_mapping and maybe_retry and n < 3:
         is_valid_mapping, maybe_retry = index_videos(maybe_retry, current_indexed_at=latest_indexed_at)
         n += 1
+    similars = get_top_k(k=5, num_candidates=100, threshold=0.7, videos=videos)
+    # serialize similars to JSON
+    with open('similars.json', 'w') as f:
+        json.dump([x.model_dump() for x in similars], f, indent=4)
 
 if __name__ == '__main__':
     run_pipelines()
