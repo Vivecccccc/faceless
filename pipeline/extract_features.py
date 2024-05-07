@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 
 from utils.dataclasses import StatusEnum, Video
 from utils.datasets import FaceH5Dataset
+from utils.exceptions import DataMismatchException, ModelInitException
 from apps.recognizer.aggregator import Aggregator
 from apps.recognizer.utils import l2_norm
 
@@ -29,7 +30,7 @@ def _init_model(num_frames: int,
                 ckpt_path: Optional[str] = None, 
                 backbone_ckpt_path: Optional[str] = None) -> Aggregator:
     if not ckpt_path and not backbone_ckpt_path:
-        raise ValueError('At least one of the model checkpoint paths must be provided')
+        raise ModelInitException('At least one of the model checkpoint paths must be provided')
     model = Aggregator(num_frames, input_size=input_size)
     try:
         if backbone_ckpt_path:
@@ -37,7 +38,7 @@ def _init_model(num_frames: int,
         if ckpt_path:
             model.load_state_dict(torch.load(ckpt_path, map_location=torch.device('cpu')))
     except Exception as e:
-        raise e
+        raise ModelInitException(f'Error while loading model checkpoint: {e}')
     return model
 
 def _init_data(path: str, 
@@ -51,8 +52,11 @@ def _init_data(path: str,
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
-    face_ds = FaceH5Dataset(path, num_frames, transform=transform)
-    dataloader = DataLoader(face_ds, batch_size=batch_size, shuffle=False, collate_fn=face_ds.collate_fn)
+    try:
+        face_ds = FaceH5Dataset(path, num_frames, transform=transform)
+        dataloader = DataLoader(face_ds, batch_size=batch_size, shuffle=False, collate_fn=face_ds.collate_fn)
+    except Exception as e:
+        raise DataMismatchException(f'Error while initializing data: {e}')
     return dataloader
 
 def extract_features(vs: List[Video],

@@ -8,12 +8,13 @@ from torch.utils.data import Dataset, DataLoader
 
 from .dataclasses import Video
 from .constants import *
+from .exceptions import DataMismatchException, H5FileInvalidException
 
 def _infer_shape(frames: List[Tuple[int, Image.Image]]):
     if all([frame[1].size == frames[0][1].size for frame in frames]):
         return (frames[0][1].size[1], frames[0][1].size[0])
     else:
-        raise ValueError('All frames must have the same shape')
+        raise DataMismatchException('All frames must have the same shape')
 
 def serialize_frames(frames: List[Tuple[int, Image.Image]], 
                      num_frames: int,
@@ -24,7 +25,7 @@ def serialize_frames(frames: List[Tuple[int, Image.Image]],
         unified_shape = _infer_shape(frames)
         with h5py.File(stored_path, 'a') as file:
             if len(frames) != num_frames:
-                raise ValueError('Frames captured mismatch with the specified number of frames')
+                raise DataMismatchException('Frames captured mismatch with the specified number of frames')
             file.create_dataset('raw', shape=(num_frames, *unified_shape, 3), dtype='uint8')
             dataset = file['raw']
             for i, frame in frames:
@@ -33,7 +34,7 @@ def serialize_frames(frames: List[Tuple[int, Image.Image]],
                 frame_array = np.array(frame, dtype='uint8')
                 dataset[i] = frame_array
     except Exception as e:
-        raise e
+        raise H5FileInvalidException(e)
     return stored_path
 
 def serialize_faces(frames: List[Tuple[int, Image.Image]],
@@ -55,7 +56,7 @@ def serialize_faces(frames: List[Tuple[int, Image.Image]],
                 dataset[i] = frame_array.transpose((2, 0, 1))
                 mask_dataset[i] = True
     except Exception as e:
-        raise e
+        raise H5FileInvalidException(e)
     return stored_path
 
 def remove_serialized_frames(v: Video):
@@ -63,7 +64,7 @@ def remove_serialized_frames(v: Video):
     try:
         os.remove(stored_path)
     except Exception as e:
-        logging.error(f'Error while removing serialized frames for video {v.id}: {e}')
+        logging.warning(f'Error while removing serialized frames for video {v.id}: {e}')
 
 class FramesH5Dataset(Dataset):
     def __init__(self, path: str):
@@ -99,7 +100,7 @@ class FaceH5Dataset(Dataset):
             for video_id in self.video_ids:
                 key_face = f'{video_id}-face'
                 if num_frames != file[key_face].shape[0]:
-                    raise ValueError(f'Number of frames in dataset of {video_id} mismatches with the specified number of frames')
+                    raise DataMismatchException(f'Number of frames in dataset of {video_id} mismatches with the specified number of frames')
                 self.indices.append(video_id)
     
     def __len__(self):

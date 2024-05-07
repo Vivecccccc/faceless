@@ -12,6 +12,7 @@ from apps.detector.detector_batch import detect_faces_batch
 from utils.constants import META_CONSTANTS, DETECTOR_CONSTANTS
 from utils.dataclasses import StatusEnum, Video
 from utils.datasets import FramesH5DataLoader, FramesH5Dataset, serialize_faces, serialize_frames, remove_serialized_frames
+from utils.exceptions import VideoFileInvalidException, H5FileInvalidException
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -33,7 +34,7 @@ def _capture(v: Video, num_frames: int) -> List[Image.Image]:
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             num_frames = min(num_frames, total_frames)
             if num_frames == 0:
-                raise ValueError(f'Video file {v_local_path} may be corrupted')
+                raise VideoFileInvalidException(f'Video file {v_local_path} may be corrupted')
             sampling_rate = total_frames // num_frames
             for i in range(total_frames):
                 ret, frame = cap.read()
@@ -58,7 +59,7 @@ def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tupl
         frames_h5_path = serialize_frames([x for x in enumerate(frames)], num_frames, v)
         del frames
     except Exception as e:
-        logging.error(f'Error while capturing frames for video {v.id}: {e}')
+        logging.error(VideoFileInvalidException(f'Error while capturing frames for video {v.id}: {e}'))
         v.status.captured = StatusEnum.FAILURE
         return None
     
@@ -69,7 +70,7 @@ def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tupl
         boxes, landmarks, indices = detect_faces_batch(batch)
 
         if landmarks.size == 0:
-            raise Exception(f'failed detecting any valid faces in video')
+            raise VideoFileInvalidException(f'failed detecting any valid faces in video')
         
         for idx, landmark, box in zip(indices, landmarks, boxes):
             frame_arr = batch[idx].numpy()
@@ -77,7 +78,7 @@ def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tupl
             warped_face = Image.fromarray(warp_and_crop_face(frame_arr, facial_keypoints, REF_POINTS, (CROP_SIZE, CROP_SIZE)))
             valid_frames[idx].append((warped_face, box))
     except Exception as e:
-        logging.error(f'Error during detection phase for video {v.id}: {e}')
+        logging.warning(f'Unexpected met during detection phase for video {v.id}: {e}')
         v.status.captured = StatusEnum.FAILURE
         return None
 
@@ -136,14 +137,14 @@ def postprocessing(valid_frames: Dict[int, List[Tuple[Image.Image, np.ndarray]]]
     
     if len(longest_sub_traj) < round(num_frames / 3):
         v.status.captured = StatusEnum.FAILURE
-        logging.error(f'Failed to capture enough valid frames for video {v.id}')
+        logging.warning(VideoFileInvalidException(f'Failed to capture enough valid frames for video {v.id}'))
         return None
     
     try:
         stored_path = serialize_faces(longest_sub_traj, num_frames, v)
         v.status.captured = StatusEnum.SUCCESS
     except Exception as e:
-        logging.error(f'Error while serializing faces for video {v.id}: {e}')
+        logging.error(H5FileInvalidException(f'Error while serializing faces for video {v.id}: {e}'))
         v.status.captured = StatusEnum.FAILURE
         return None
     finally:

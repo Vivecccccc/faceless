@@ -7,6 +7,7 @@ from torch.autograd import Variable
 
 from .get_nets import PNet, RNet, ONet
 from .box_utils import correct_bboxes, nms, calibrate_box, convert_to_square, _preprocess
+from ...utils.exceptions import DataMismatchException
 
 # initialize MT-CNN networks
 pnet = PNet().eval()
@@ -152,7 +153,7 @@ def _multiscale_fusion(boxes: List[List[Optional[np.ndarray]]]) -> List[np.ndarr
             If a frame does not have any bounding boxes across all scales, the corresponding element is None.
     """
     if not all([len(box) == len(boxes[0]) for box in boxes]):
-        raise ValueError('All scales must have the same number of frames')
+        raise DataMismatchException('All scales must have the same number of frames')
     num_frames = len(boxes[0])
     fused_boxes = []
     for i in range(num_frames):
@@ -302,10 +303,10 @@ def detect_faces_batch(batch: torch.Tensor,
             try:
                 fused_boxes[i] = valid_boxes.pop(0)
             except IndexError:
-                raise ValueError('Mismatch between valid boxes and masks')
+                raise DataMismatchException('Mismatch between valid boxes and masks')
     # sanity check
     if len(valid_boxes) > 0:
-        raise ValueError('Mismatch between valid boxes and masks')
+        raise DataMismatchException('Mismatch between valid boxes and masks')
     
     boxed_frames = []
     for i, boxes in enumerate(fused_boxes):

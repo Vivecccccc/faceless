@@ -12,6 +12,7 @@ from apps.indexer.index_helpers import get_last_index_time, create_or_check_inde
 
 from utils.constants import S3_CONSTANTS, META_CONSTANTS, PORTAL_CONSTANTS
 from utils.dataclasses import StatusEnum, Video, VideoMetadata, VideoStatus
+from utils.exceptions import ESIndexMappingException, VideoFileInvalidException, ESRecordsException, S3FetchException, PortalConnectionException
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -50,7 +51,7 @@ def _check_video_integrity(file_path: str) -> bool:
         if total_frames != 0:
             flag = True
     except Exception:
-        logging.error(f'Video file {file_path} may be corrupted')
+        logging.warning(VideoFileInvalidException(f'Video file {file_path} may be corrupted'))
     finally:
         if cap:
             cap.release()
@@ -61,7 +62,7 @@ def fetch_prev_failure() -> List[Video]:
     try:
         index_name = create_or_check_index(exists_ok=True)
         if index_name is None:
-            raise Exception(f'Index with name {INDEX_NAME} has a different mapping')
+            raise ESIndexMappingException(f'Index with name {INDEX_NAME} has a different mapping')
         query = {
             "query": {
                 "bool": {
@@ -78,7 +79,7 @@ def fetch_prev_failure() -> List[Video]:
         }
         response = es_client.search(index=index_name, body=query)
     except Exception as e:
-        logging.error(f'Error fetching previous failures from {INDEX_NAME}: {e}')
+        logging.warning(f'Error fetching previous failures from {INDEX_NAME}: {e}')
         return videos
     # perform query to fetch videos with any failure status 
     # i.e., any of fetched / captured / peated not equal to 1
@@ -98,14 +99,14 @@ def fetch_prev_failure() -> List[Video]:
                                              peated=StatusEnum(video_raw['status']['peated'])),
                           embedding=video_raw['embedding'])
         except Exception as e:
-            logging.error(f'Error while fetching info of previous failure {hit["_id"]}: {e}')
+            logging.warning(ESRecordsException(f'Error while fetching info of previous failure {hit["_id"]}: {e}'))
             continue
 
         flag, created_at = _get_video(video.metadata.s3_file_key, video.id)
         if flag and created_at is not None:
             video.status.fetched = StatusEnum.SUCCESS
         else:
-            logging.error(f'Error while fetching video of previous failure {hit["_id"]}')
+            logging.warning(S3FetchException(f'Error while fetching video of previous failure {hit["_id"]}'))
             video.status.fetched = StatusEnum.FAILURE
         video.attempt_times += 1
         video.metadata = VideoMetadata(application_id=video.metadata.application_id,
@@ -119,18 +120,14 @@ def fetch_prev_failure() -> List[Video]:
 
 def fetch_videos(since: Optional[datetime]) -> List[Video]:
     videos: List[Video] = []
-    try:
-        if since is None:
-            since: datetime = get_last_index_time()
-    except Exception as e:
-        logging.warning('Failed to retrieve last indexed time, defaulting to one day ago')
-        since: datetime = datetime.now() - timedelta(days=1)
+    if since is None:
+        since: datetime = get_last_index_time()
     now: datetime = datetime.now()
     try:
         response_get = requests.get(url=PORTAL_CONSTANTS['ENDPOINT_URL'], params={'since': since, 'until': datetime.now()})
         response_get.raise_for_status()
     except Exception as e:
-        logging.error(f'Failed to retrieve video ids due to {e}')
+        logging.error(PortalConnectionException(f'Failed to retrieve video ids due to {e}'))
         return videos
     
     data = response_get.json()
@@ -140,7 +137,7 @@ def fetch_videos(since: Optional[datetime]) -> List[Video]:
         id: str = uuid.uuid4().hex
         flag, created_at = _get_video(item['file_id'], id)
         if not flag or created_at is None:
-            logging.error(f'Error while fetching video {item["file_id"]}')
+            logging.warning(S3FetchException(f'Error while fetching video {item["file_id"]}'))
 
         metadata: VideoMetadata = VideoMetadata(application_id=item['app_id'],
                                                 s3_file_key=item['file_id'],
@@ -150,11 +147,5 @@ def fetch_videos(since: Optional[datetime]) -> List[Video]:
 
         item['status_id'] = status.fetched.value
         item['timestamp'] = created_at
-
-    # try:
-    #     response_post = requests.post(url=PORTAL_CONSTANTS['ENDPOINT_URL'], json=data)
-    #     response_post.raise_for_status()
-    # except Exception as e:
-    #     logging.error(f'Failed to update video status due to {e}')
     
     return videos
