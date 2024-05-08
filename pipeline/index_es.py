@@ -22,10 +22,10 @@ def index_videos(videos: List[Video]):
     if is_valid_mapping:
         for vid in videos:
             try:
-                es_client.index(index=INDEX_NAME, document=vid.to_es_obj(), id=vid.id(), op_type='create')
+                es_client.index(index=INDEX_NAME, document=vid.to_es_obj(), id=vid.id, op_type='create')
             except es.ConflictError:
                 try:
-                    es_client.index(index=INDEX_NAME, document=vid.to_es_obj(), id=vid.id(), op_type='index')
+                    es_client.index(index=INDEX_NAME, document=vid.to_es_obj(), id=vid.id, op_type='index')
                 except Exception as e:
                     logging.warning(ESRecordsException(f'Error while updating index for previous failure: {e}'))
                     maybe_retry.append(vid)

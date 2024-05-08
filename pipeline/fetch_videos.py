@@ -64,6 +64,7 @@ def fetch_prev_failure() -> List[Video]:
         if index_name is None:
             raise ESIndexMappingException(f'Index with name {INDEX_NAME} has a different mapping')
         query = {
+            "size": 9999,
             "query": {
                 "bool": {
                     "should": [
@@ -146,6 +147,5 @@ def fetch_videos(since: Optional[datetime]) -> List[Video]:
         videos.append(Video(id=id, indexed_at=now, attempt_times=1, metadata=metadata, status=status))
 
         item['status_id'] = status.fetched.value
-        item['timestamp'] = created_at
     
     return videos

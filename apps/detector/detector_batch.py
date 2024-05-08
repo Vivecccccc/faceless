@@ -7,7 +7,8 @@ from torch.autograd import Variable
 
 from .get_nets import PNet, RNet, ONet
 from .box_utils import correct_bboxes, nms, calibrate_box, convert_to_square, _preprocess
-from ...utils.exceptions import DataMismatchException
+
+from utils.exceptions import DataMismatchException
 
 # initialize MT-CNN networks
 pnet = PNet().eval()

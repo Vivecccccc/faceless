@@ -58,7 +58,7 @@ def run_pipelines():
         is_valid_mapping, maybe_retry = index_videos(videos)
         n = 0
         while is_valid_mapping and maybe_retry and n < 3:
-            is_valid_mapping, maybe_retry = index_videos(maybe_retry, current_indexed_at=latest_indexed_at)
+            is_valid_mapping, maybe_retry = index_videos(maybe_retry)
             n += 1
         similars = get_top_k(k=5, num_candidates=100, threshold=0.7, videos=videos)
         # serialize similars to JSON
