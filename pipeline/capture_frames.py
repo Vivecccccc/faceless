@@ -1,6 +1,7 @@
 import os
 import cv2
 import math
+import torch
 import logging
 import numpy as np
 from PIL import Image
@@ -23,6 +24,8 @@ VIDEO_EXTENSION = META_CONSTANTS['VIDEO_EXTENSION']
 CROP_SIZE = DETECTOR_CONSTANTS['CROP_SIZE']
 SCALE = DETECTOR_CONSTANTS['SCALE']
 REF_POINTS = get_reference_facial_points(default_square=True) * SCALE
+
+use_cuda = torch.cuda.is_available()
 
 def _capture(v: Video, num_frames: int) -> List[Image.Image]:
     frames = []
@@ -81,6 +84,9 @@ def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tupl
         logging.warning(f'Unexpected met during detection phase for video {v.id}: {e}')
         v.status.captured = StatusEnum.FAILURE
         return None
+    finally:
+        if use_cuda:
+            torch.cuda.empty_cache()
 
     return valid_frames
 
@@ -138,6 +144,7 @@ def postprocessing(valid_frames: Dict[int, List[Tuple[Image.Image, np.ndarray]]]
     if len(longest_sub_traj) < round(num_frames / 3):
         v.status.captured = StatusEnum.FAILURE
         logging.warning(VideoFileInvalidException(f'Failed to capture enough valid frames for video {v.id}'))
+        remove_serialized_frames(v)
         return None
     
     try:

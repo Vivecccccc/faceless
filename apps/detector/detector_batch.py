@@ -1,9 +1,11 @@
+import cv2
 import math
 import torch
 import numpy as np
 from scipy.ndimage import zoom
 from typing import List, Optional, Tuple
 from torch.autograd import Variable
+from torch.nn.functional import interpolate
 
 from .get_nets import PNet, RNet, ONet
 from .box_utils import correct_bboxes, nms, calibrate_box, convert_to_square, _preprocess
@@ -14,6 +16,13 @@ from utils.exceptions import DataMismatchException
 pnet = PNet().eval()
 rnet = RNet().eval()
 onet = ONet().eval()
+use_cuda = False
+
+if torch.cuda.is_available():
+    use_cuda = True
+    pnet.cuda()
+    rnet.cuda()
+    onet.cuda()
 
 def _get_scales(frames: torch.Tensor,
                 min_face_size=20.0):
@@ -47,6 +56,14 @@ def _resize_images(frames: torch.Tensor, scale) -> np.ndarray:
         resized_frames_list.append(_preprocess(frame))
     return np.vstack(resized_frames_list)
 
+def _resize_images_torch(frames: torch.Tensor, scale) -> torch.Tensor:
+    frames = frames.permute(0, 3, 1, 2)
+    _, _, width, height = frames.size()
+    sw, sh = math.ceil(width * scale), math.ceil(height * scale)
+    resized_frames = interpolate(frames, size=(sw, sh), mode='bilinear', align_corners=False)
+    resized_frames = _preprocess(resized_frames, use_torch=True)
+    return resized_frames
+
 def _first_stage_batch(frames: torch.Tensor,
                        scale: float,
                        threshold: float):
@@ -62,11 +79,16 @@ def _first_stage_batch(frames: torch.Tensor,
         list: A list of bounding boxes for each frame. Each element in the list is either an ndarray of shape (num_boxes, 9) or None.
     """
     bounding_boxes = []
-    resized_frames = Variable(torch.FloatTensor(_resize_images(frames, scale)), volatile=True)
+    if use_cuda:
+        frames = frames.cuda()
+    resized_frames = Variable(_resize_images_torch(frames, scale), volatile=True)
     outputs = pnet(resized_frames)
     for b, a in zip(*outputs):
-        probs = a.data.numpy()[1, :, :] # shape: [n, m]
-        offsets = b.data.numpy() # shape: [4, n, m]
+        if use_cuda:
+            a = a.cpu()
+            b = b.cpu()
+        probs = a.detach().numpy()[1, :, :] # shape: [n, m]
+        offsets = b.detach().numpy() # shape: [4, n, m]
         boxes = __generate_bboxes(probs, offsets, scale, threshold)
         if boxes.shape[0] == 0:
             bounding_boxes.append(None)
@@ -138,6 +160,40 @@ def _get_image_boxes(boxes: np.ndarray, frame: torch.Tensor, size=24):
         img_boxes[i, :, :, :] = _preprocess(img_box)
     return img_boxes # (num_boxes, 3, size, size)
 
+def _get_image_boxes_opencv(boxes: np.ndarray, frame: torch.Tensor, size=24):
+    """
+    Extracts and resizes image boxes from the given frame based on the provided bounding boxes using OpenCV, considering bounding corrections.
+
+    Args:
+        boxes (np.ndarray): Array of bounding boxes.
+        frame (torch.Tensor): Input frame.
+        size (int, optional): Size of the image boxes. Defaults to 24.
+
+    Returns:
+        np.ndarray: Array of resized image boxes.
+    """
+    num_boxes = boxes.shape[0]
+    width, height = frame.size(1), frame.size(0)
+
+    [dy, edy, dx, edx, y, ey, x, ex, w, h] = correct_bboxes(boxes, width, height)
+    img_boxes = np.zeros((num_boxes, 3, size, size), 'float32')
+
+    frame_np = frame.numpy()  # Convert the whole frame to numpy array once
+
+    for i in range(num_boxes):
+        # Create an empty box to place the valid pixel data
+        img_box = np.zeros((h[i], w[i], 3), dtype='uint8')
+
+        # Correct for boundary overflow/underflow
+        img_box[dy[i]:edy[i]+1, dx[i]:edx[i]+1, :] = frame_np[y[i]:ey[i]+1, x[i]:ex[i]+1, :]
+        
+        # Resize the extracted part to the desired size using OpenCV
+        resized_img_box = cv2.resize(img_box, (size, size), interpolation=cv2.INTER_LINEAR)
+        # Preprocess and store in the array
+        img_boxes[i, :, :, :] = _preprocess(resized_img_box)
+
+    return img_boxes  # (num_boxes, 3, size, size)
+
 def _multiscale_fusion(boxes: List[List[Optional[np.ndarray]]]) -> List[np.ndarray]:
     """
     Fuse bounding boxes from multiple scales.
@@ -185,11 +241,15 @@ def _second_stage_batch(frames: List[np.ndarray],
     num_boxes_each_frame = [frame.shape[0] for frame in frames]
     frames = np.vstack(frames) # (batch_size * num_boxes, 3, 24, 24)
     frames = Variable(torch.FloatTensor(frames), volatile=True)
+    if use_cuda:
+        frames = frames.cuda()
     outputs = rnet(frames)
 
+    if use_cuda:
+        outputs = [o.cpu() for o in outputs]
     # extract probabilities and offsets
-    offsets = outputs[0].data.numpy() # (batch_size * num_boxes, 4)
-    probs = outputs[1].data.numpy() # (batch_size * num_boxes, 2)
+    offsets = outputs[0].detach().numpy() # (batch_size * num_boxes, 4)
+    probs = outputs[1].detach().numpy() # (batch_size * num_boxes, 2)
 
     # split back to individual frames
     offsets = np.split(offsets, np.cumsum(num_boxes_each_frame)[:-1], axis=0)
@@ -230,12 +290,16 @@ def _third_stage_batch(frames: List[np.ndarray],
     num_boxes_each_frame = [frame.shape[0] for frame in frames]
     frames = np.vstack(frames) # (batch_size * num_boxes, 3, 48, 48)
     frames = Variable(torch.FloatTensor(frames), volatile=True)
+    if use_cuda:
+        frames = frames.cuda()
     outputs = onet(frames)
 
+    if use_cuda:
+        outputs = [o.cpu() for o in outputs]
     # extract landmarks
-    landmarks = outputs[0].data.numpy() # (batch_size * num_boxes, 10)
-    offsets = outputs[1].data.numpy() # (batch_size * num_boxes, 4)
-    probs = outputs[2].data.numpy() # (batch_size * num_boxes, 2)
+    landmarks = outputs[0].detach().numpy() # (batch_size * num_boxes, 10)
+    offsets = outputs[1].detach().numpy() # (batch_size * num_boxes, 4)
+    probs = outputs[2].detach().numpy() # (batch_size * num_boxes, 2)
 
     # split back to individual frames
     landmarks = np.split(landmarks, np.cumsum(num_boxes_each_frame)[:-1], axis=0)
@@ -272,10 +336,10 @@ def detect_faces_batch(batch: torch.Tensor,
     scales = _get_scales(frames, min_face_size)
     
     bounding_boxes = []
-
+    frames = frames.float()
     for s in scales:
         bounding_boxes.append(_first_stage_batch(frames, s, thresholds[0])) # (scales, batch_size, (ndarray(num_boxes, 9) | None))
-    
+    frames = frames.byte()
     fused_boxes = _multiscale_fusion(bounding_boxes) # (batch_size, (ndarray(num_boxes, 9)))
     
     boxed_frames = []
@@ -291,7 +355,7 @@ def detect_faces_batch(batch: torch.Tensor,
         boxes[:, 0:4] = np.round(boxes[:, 0:4])
         fused_boxes[i] = boxes # (batch_size, (ndarray(num_boxes, 9)))
 
-        boxed_frame = _get_image_boxes(boxes, frames[i], size=24)
+        boxed_frame = _get_image_boxes_opencv(boxes, frames[i], size=24)
         boxed_frames.append(boxed_frame) # (batch_size, ndarray(num_boxes, 3, 24, 24))
         valid_boxes.append(boxes)
     if valid_boxes:
@@ -314,7 +378,7 @@ def detect_faces_batch(batch: torch.Tensor,
         if boxes.size == 0:
             masks[i] = 0
             continue
-        boxed_frame = _get_image_boxes(boxes, frames[i], size=48)
+        boxed_frame = _get_image_boxes_opencv(boxes, frames[i], size=48)
         boxed_frames.append(boxed_frame)
         valid_boxes.append(boxes)
     if valid_boxes:

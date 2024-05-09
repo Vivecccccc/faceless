@@ -223,7 +223,7 @@ def correct_bboxes(bboxes, width, height):
     return return_list
 
 
-def _preprocess(img):
+def _preprocess(img, use_torch=False):
     """Preprocessing step before feeding the network.
 
     Arguments:
@@ -232,7 +232,8 @@ def _preprocess(img):
     Returns:
         a float numpy array of shape [1, c, h, w].
     """
-    img = img.transpose((2, 0, 1))
-    img = np.expand_dims(img, 0)
+    if not use_torch:
+        img = img.transpose((2, 0, 1))
+        img = np.expand_dims(img, 0)
     img = (img - 127.5) * 0.0078125
     return img
