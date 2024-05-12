@@ -87,7 +87,8 @@ class FramesH5DataLoader(DataLoader):
         super().__init__(dataset, 
                          batch_size=batch_size, 
                          shuffle=False,
-                         collate_fn=dataset.collate_fn)
+                         collate_fn=dataset.collate_fn,
+                         pin_memory=True)
         
 class FaceH5Dataset(Dataset):
     def __init__(self, path: str, num_frames: int, transform=None):

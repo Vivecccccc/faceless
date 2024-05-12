@@ -64,6 +64,21 @@ def _resize_images_torch(frames: torch.Tensor, scale) -> torch.Tensor:
     resized_frames = _preprocess(resized_frames, use_torch=True)
     return resized_frames
 
+def _safe_r_o_net(model, frames: torch.Tensor, max_boxes: int):
+    outputs = []
+    for i in range(0, frames.size(0), max_boxes):
+        batch = frames[i:i+max_boxes]
+        if use_cuda:
+            batch = batch.cuda()
+        output = model(batch) # output is a tuple of multiple tensors
+        if use_cuda:
+            output = [o.cpu() for o in output]
+        outputs.append(output)
+    if not outputs:
+        return outputs
+    outputs = zip(*outputs)
+    return [torch.cat(o, dim=0) for o in outputs]
+
 def _first_stage_batch(frames: torch.Tensor,
                        scale: float,
                        threshold: float):
@@ -81,7 +96,7 @@ def _first_stage_batch(frames: torch.Tensor,
     bounding_boxes = []
     if use_cuda:
         frames = frames.cuda()
-    resized_frames = Variable(_resize_images_torch(frames, scale), volatile=True)
+    resized_frames = Variable(_resize_images_torch(frames, scale))
     outputs = pnet(resized_frames)
     for b, a in zip(*outputs):
         if use_cuda:
@@ -240,13 +255,8 @@ def _second_stage_batch(frames: List[np.ndarray],
     # merge frames into a single tensor
     num_boxes_each_frame = [frame.shape[0] for frame in frames]
     frames = np.vstack(frames) # (batch_size * num_boxes, 3, 24, 24)
-    frames = Variable(torch.FloatTensor(frames), volatile=True)
-    if use_cuda:
-        frames = frames.cuda()
-    outputs = rnet(frames)
-
-    if use_cuda:
-        outputs = [o.cpu() for o in outputs]
+    frames = Variable(torch.FloatTensor(frames))
+    outputs = _safe_r_o_net(rnet, frames, 20480)
     # extract probabilities and offsets
     offsets = outputs[0].detach().numpy() # (batch_size * num_boxes, 4)
     probs = outputs[1].detach().numpy() # (batch_size * num_boxes, 2)
@@ -289,13 +299,8 @@ def _third_stage_batch(frames: List[np.ndarray],
     # merge frames into a single tensor
     num_boxes_each_frame = [frame.shape[0] for frame in frames]
     frames = np.vstack(frames) # (batch_size * num_boxes, 3, 48, 48)
-    frames = Variable(torch.FloatTensor(frames), volatile=True)
-    if use_cuda:
-        frames = frames.cuda()
-    outputs = onet(frames)
-
-    if use_cuda:
-        outputs = [o.cpu() for o in outputs]
+    frames = Variable(torch.FloatTensor(frames))
+    outputs = _safe_r_o_net(onet, frames, 2048)
     # extract landmarks
     landmarks = outputs[0].detach().numpy() # (batch_size * num_boxes, 10)
     offsets = outputs[1].detach().numpy() # (batch_size * num_boxes, 4)

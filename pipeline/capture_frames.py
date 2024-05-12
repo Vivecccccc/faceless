@@ -70,7 +70,8 @@ def run_batch_capture(v: Video, num_frames: int) -> Optional[Dict[int, List[Tupl
     dataloader = FramesH5DataLoader(fr_ds)
     batch = next(iter(dataloader)) # batch size equals to len(dataset) equalled to num_frames
     try:
-        boxes, landmarks, indices = detect_faces_batch(batch)
+        with torch.no_grad():
+            boxes, landmarks, indices = detect_faces_batch(batch)
 
         if landmarks.size == 0:
             raise VideoFileInvalidException(f'failed detecting any valid faces in video')
